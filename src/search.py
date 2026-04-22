@@ -1,9 +1,8 @@
 import os
-from dotenv import load_dotenv
+import streamlit as st
 from src.vectorstore import FaissVectorStore
 from langchain_groq import ChatGroq
 
-import streamlit as st
 class RAGSearch:
     def __init__(
         self,
@@ -20,19 +19,36 @@ class RAGSearch:
         if not (os.path.exists(faiss_path) and os.path.exists(meta_path)):
             from src.data_loader import load_all_documents
             docs = load_all_documents("data")
+
+            if not docs:
+                raise ValueError("No documents found in data folder.")
+
             self.vectorstore.build_from_documents(docs)
         else:
             self.vectorstore.load()
 
+        # ✅ SAFE API KEY HANDLING
+        if "GROQ_API_KEY" not in st.secrets:
+            raise ValueError("GROQ_API_KEY missing in Streamlit secrets")
+
         groq_api_key = st.secrets["GROQ_API_KEY"]
-        self.llm = ChatGroq(api_key=groq_api_key, model=llm_model)
+
+        self.llm = ChatGroq(
+            api_key=groq_api_key,
+            model=llm_model
+        )
 
         print(f"[INFO] Groq LLM initialized: {llm_model}")
 
     def search_and_summarize(self, query: str, top_k: int = 5) -> str:
         results = self.vectorstore.query(query, top_k=top_k)
 
-        texts = [r["metadata"].get("text", "") for r in results if r["metadata"]]
+        texts = [
+            r["metadata"].get("text", "")
+            for r in results
+            if r["metadata"]
+        ]
+
         context = "\n\n".join(texts)
 
         print("\n[DEBUG] Retrieved Context:\n", context[:500])
